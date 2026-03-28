@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-sim
+  labels:
+    app: vllm-sim
+spec:
+  # Two replicas to demonstrate routing imbalance under skewed load.
+  # Round-robin (default Kubernetes Service) will unevenly distribute
+  # long-prompt requests, causing queue buildup on one replica while
+  # the other sits idle. This is the problem the router solves.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vllm-sim
+  template:
+    metadata:
+      labels:
+        app: vllm-sim
+    spec:
+      containers:
+      - name: simulator
+        image: ghcr.io/llm-d/llm-d-inference-sim:v0.8.0
+        args:
+          - "--model"
+          - "meta-llama/Llama-3.1-8B-Instruct"
+          # Using dummy model name → simulator uses regex tokenizer,
+          # zero startup overhead, no HuggingFace download attempted.
+          # The model name string has no effect on metrics behavior.
+
+          - "--port"
+          - "8000"
+
+          # --- Concurrency cap ---
+          # Models a T4-class GPU node: 16GB VRAM, ~8GB model weights
+          # in fp16, leaving ~8GB for KV cache. At 2048 max context,
+          # roughly 8 sequences fit before KV cache exhaustion.
+          # This is what forces requests into the waiting queue and
+          # makes routing decisions matter — on a large GPU with 256
+          # slots, queuing rarely occurs and routing is irrelevant.
+          - "--max-num-seqs"
+          - "8"
+
+          # --- Queue depth ---
+          # Allow up to 100 requests to wait. Large enough that the
+          # queue doesn't reject requests during load bursts, but bounded
+          # so the simulator behaves like a real constrained node.
+          - "--max-waiting-queue-length"
+          - "100"
+
+          # --- KV cache size ---
+          # 512 blocks × 16 tokens/block = 8192 total token slots.
+          # Approximates KV cache capacity on T4 after model weights
+          # consume ~8GB of the 16GB VRAM budget.
+          - "--kv-cache-size"
+          - "512"
+
+          # --- Context window ---
+          # 2048 token limit reflects T4 memory constraints. Long prompts
+          # (500-1000 tokens) from the load generator will consume a
+          # significant fraction of this, contributing to slot pressure.
+          - "--max-model-len"
+          - "2048"
+
+          # --- Time to first token (TTFT) ---
+          # 400ms base TTFT models Llama-3-8B on T4 at light load.
+          # Sourced from vLLM published benchmarks on T4-class hardware.
+          # This is the primary SLO metric the router optimizes.
+          - "--time-to-first-token"
+          - "400ms"
+
+          # 80ms std dev = ~20% jitter, models thermal and memory
+          # bandwidth variability on shared GPU nodes.
+          - "--time-to-first-token-std-dev"
+          - "80ms"
+
+          # --- Prefill cost per token ---
+          # 2ms/token means a 500-token prompt adds ~1s to TTFT,
+          # and a 1000-token prompt adds ~2s. This is the mechanism
+          # that creates queue imbalance under skewed prompt lengths:
+          # long prompts hold slots open, starving short requests.
+          - "--prefill-time-per-token"
+          - "2ms"
+
+          # --- Decode phase latency ---
+          # 30ms/token models T4 decode throughput for Llama-3-8B.
+          # A 100-token response takes ~3s total. Grounded in vLLM
+          # T4 benchmark data.
+          - "--inter-token-latency"
+          - "30ms"
+
+          # 8ms std dev = ~25% jitter in decode phase, realistic for
+          # memory-bandwidth-bound operations on shared hardware.
+          - "--inter-token-latency-std-dev"
+          - "8ms"
+
+          # --- Load-induced latency degradation ---
+          # When all 8 slots are occupied, latency multiplies by 3x.
+          # Models GPU memory bandwidth saturation under full concurrency.
+          # Must be >= 1.0. Value of 3.0 is conservative — real
+          # degradation on small GPUs can reach 5-10x under extreme load.
+          # This is the signal your router exploits: a replica with high
+          # num_requests_running will have degraded TTFT, making it a
+          # worse routing target even before its queue fills.
+          - "--time-factor-under-load"
+          - "3.0"
+
+        ports:
+        - containerPort: 8000
+          name: http
+
+        # Kubernetes liveness probe — restarts the pod if /health stops
+        # responding. Mirrors how production inference deployments are
+        # monitored. Not strictly required for the experiment but makes
+        # this a production-representative manifest.
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+        # Resource requests intentionally omitted — this is a simulator
+        # with no GPU requirement. In a production manifest targeting
+        # real vLLM, you would request nvidia.com/gpu: 1 here and set
+        # memory limits reflecting VRAM budget.

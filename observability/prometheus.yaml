@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 1s   # IMPORTANT: high resolution
+
+scrape_configs:
+  - job_name: 'vllm-replica-1'
+    static_configs:
+      - targets: ['localhost:8001']
+
+  - job_name: 'vllm-replica-2'
+    static_configs:
+      - targets: ['localhost:8002']
