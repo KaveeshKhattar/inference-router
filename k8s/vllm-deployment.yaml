@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vllm-sim
+  name: vllm
   labels:
-    app: vllm-sim
+    app: vllm
 spec:
   # Two replicas to demonstrate routing imbalance under skewed load.
   # Round-robin (default Kubernetes Service) will unevenly distribute
@@ -12,11 +12,11 @@ spec:
   replicas: 2
   selector:
     matchLabels:
-      app: vllm-sim
+      app: vllm
   template:
     metadata:
       labels:
-        app: vllm-sim
+        app: vllm
     spec:
       containers:
       - name: simulator

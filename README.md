@@ -181,7 +181,7 @@ This router is a from-scratch Go implementation of that same scoring idea — wi
 - [x] Layer 1 — Metrics scraper
 - [x] Layer 2 — Kubernetes deployment
 - [x] Layer 3 — Load generator + Grafana baseline
-- [ ] Layer 4 — Go metrics client
-- [ ] Layer 5 — Router with scoring function
+- [x] Layer 4 — Go metrics client
+- [x] Layer 5 — Router with scoring function
 - [ ] Layer 6 — Helm chart + router metrics
 - [ ] Layer 7 — Controlled benchmark, p99 TTFT comparison

@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-router
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference-router
+  template:
+    metadata:
+      labels:
+        app: inference-router
+    spec:
+      containers:
+      - name: router
+        image: llm-router:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 9000
+        env:
+        - name: VLLM_SERVICE_HOST
+          value: "vllm-headless.default.svc.cluster.local"
