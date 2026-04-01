@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-headless
+  labels:
+    app.kubernetes.io/name: inference-router
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: vllm
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/component: vllm
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

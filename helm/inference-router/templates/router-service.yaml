@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-router
+  labels:
+    app.kubernetes.io/name: inference-router
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: router
+  annotations:
+    prometheus.io/scrape: {{ index .Values.router.service.annotations "prometheus.io/scrape" | quote }}
+    prometheus.io/path: {{ index .Values.router.service.annotations "prometheus.io/path" | quote }}
+    prometheus.io/port: {{ index .Values.router.service.annotations "prometheus.io/port" | quote }}
+spec:
+  type: {{ .Values.router.service.type }}
+  selector:
+    app.kubernetes.io/component: router
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: {{ .Values.router.service.port }}
+      targetPort: {{ .Values.router.service.targetPort }}

@@ -1,19 +1,57 @@
 global:
-  scrape_interval: 1s   # IMPORTANT: high resolution
+  scrape_interval: 2s
+  scrape_timeout: 5s
 
 scrape_configs:
-  - job_name: 'vllm-replica-1'
-    static_configs:
-      - targets: ['localhost:8001']
-
-  - job_name: 'vllm-replica-2'
-    static_configs:
-      - targets: ['localhost:8002']
-      
+  # Local Prometheus mode:
+  # 1) Keep Prometheus on localhost:9090
+  # 2) Run one kubectl proxy: `kubectl proxy --port=8001`
+  # 3) Prometheus discovers pods via kubeconfig and scrapes through API proxy.
   - job_name: 'inference-router'
     kubernetes_sd_configs:
-      - role: service
+      - role: pod
+        kubeconfig_file: /Users/heeshi/.kube/config
     relabel_configs:
-      - source_labels: [__meta_kubernetes_service_name]
+      - source_labels: [__meta_kubernetes_namespace]
         action: keep
-        regex: inference-router # Matches your router service name
+        regex: default
+      - source_labels: [__meta_kubernetes_pod_phase]
+        action: keep
+        regex: Running
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+        action: keep
+        regex: router
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_pod_name]
+        action: replace
+        target_label: __metrics_path__
+        replacement: /api/v1/namespaces/$1/pods/$2:9000/proxy/metrics
+      - target_label: __address__
+        replacement: localhost:8001
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: replica
+
+  - job_name: 'vllm'
+    kubernetes_sd_configs:
+      - role: pod
+        kubeconfig_file: /Users/heeshi/.kube/config
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace]
+        action: keep
+        regex: default
+      - source_labels: [__meta_kubernetes_pod_phase]
+        action: keep
+        regex: Running
+      # Support both Helm labels (component=vllm) and legacy raw labels (app=vllm).
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component, __meta_kubernetes_pod_label_app]
+        action: keep
+        regex: vllm;|;vllm|vllm;vllm
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_pod_name]
+        action: replace
+        target_label: __metrics_path__
+        replacement: /api/v1/namespaces/$1/pods/$2:8000/proxy/metrics
+      - target_label: __address__
+        replacement: localhost:8001
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: replica

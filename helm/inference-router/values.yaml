@@ -1,0 +1,70 @@
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+
+rbac:
+  create: true
+
+router:
+  replicas: 1
+  image:
+    repository: llm-router
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 9000
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/path: "/metrics"
+      prometheus.io/port: "80"
+  podAnnotations: {}
+  resources: {}
+  env:
+    VLLM_DISCOVERY_HOST: vllm-headless
+    VLLM_METRICS_PORT: "8000"
+    ROUTER_PORT: "9000"
+    ROUTER_SCRAPE_TIMEOUT: "1500ms"
+    ROUTER_WEIGHT_RECALC_INTERVAL: "2s"
+    ROUTER_WEIGHT_SNAPSHOT_ENABLED: "true"
+    ROUTER_WEIGHT_SNAPSHOT_INTERVAL: "5m"
+    ROUTER_WEIGHT_SNAPSHOT_CONFIGMAP: "router-weight-snapshot"
+    ROUTER_WEIGHT_SNAPSHOT_DATA_KEY: "weights.json"
+
+vllm:
+  enabled: true
+  replicas: 2
+  image:
+    repository: ghcr.io/llm-d/llm-d-inference-sim
+    tag: v0.8.0
+    pullPolicy: IfNotPresent
+  resources: {}
+  args:
+    - "--model"
+    - "meta-llama/Llama-3.1-8B-Instruct"
+    - "--port"
+    - "8000"
+    - "--max-num-seqs"
+    - "8"
+    - "--max-waiting-queue-length"
+    - "100"
+    - "--kv-cache-size"
+    - "512"
+    - "--max-model-len"
+    - "2048"
+    - "--time-to-first-token"
+    - "400ms"
+    - "--time-to-first-token-std-dev"
+    - "80ms"
+    - "--prefill-time-per-token"
+    - "2ms"
+    - "--inter-token-latency"
+    - "30ms"
+    - "--inter-token-latency-std-dev"
+    - "8ms"
+    - "--time-factor-under-load"
+    - "3.0"
