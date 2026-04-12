@@ -5,7 +5,7 @@ metadata:
 spec:
   type: NodePort
   selector:
-    app: vllm-sim
+    app: vllm
   ports:
     - protocol: TCP
       port: 80

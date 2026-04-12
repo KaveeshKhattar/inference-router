@@ -149,6 +149,70 @@ This is the problem. Layers 4–7 build the solution.
 
 ---
 
+## Load Test Results
+ 
+All tests use Poisson arrival process, long prompts (80% of requests), `meta-llama/Llama-3.1-8B-Instruct`.
+ 
+### Round-Robin Saturation Curve (long prompts (20% of requests))
+ 
+| RPS | p50 | p95 | p99 | avg |
+|-----|-----|-----|-----|-----|
+| 6 | 0.81s | 8.0s | 19.1s | 1.84s |
+| 8 | 0.91s | 9.8s | 20.2s | 2.01s |
+| 9 | 0.91s | 9.3s | 21.3s | 2.10s |
+| 10 | 0.84s | 6.1s | 12.5s | 1.56s |
+| 12 | 1.29s | 7.2s | 23.8s | 2.50s |
+| 20 | 9.80s | 32.3s | 42.6s | 12.7s |
+| 25 | 10.0s | 24.4s | 32.8s | 11.1s |
+| 45 | 14.9s | 30.0s | 38.7s | 16.6s |
+| 75 | 17.9s | 28.5s | 43.5s | 18.2s |
+ 
+**Saturation cliff: ~15 RPS.** Below this, p50 stays under 1.3s. Above it, p50 jumps to 9.8s+.
+ 
+### Queue-Aware vs Round-Robin (v1 scoring, 15 RPS, long prompts (20% of requests))
+ 
+| Metric | Round-Robin | Queue-Aware | Delta |
+|--------|-------------|-------------|-------|
+| p50 | ~1.3s | 2.9s | +1.6s |
+| p95 | ~10s | 12.3s | +2.3s |
+| p99 | ~22s | 25.6s | +3.5s |
+| avg | ~2.5s | 4.2s | +1.7s |
+ 
+QA underperforms with v1 scoring — broken `estimatedLoad` formula means routing decisions are effectively random with added per-request scrape overhead.
+ 
+### Queue-Aware vs Round-Robin (v2 scoring, 5 RPS, long prompts (80% of requests))
+ 
+| Metric | Round-Robin | Queue-Aware | Delta |
+|--------|-------------|-------------|-------|
+| p50 | 1.29s | 1.41s | +0.12s _(expected)_ |
+| p95 | 11.22s | 4.82s | **−57%** |
+| p99 | 21.30s | 17.25s | −19% |
+| avg | 2.50s | 2.12s | −15% |
+ 
+p50 slightly worse at low load — no queue pressure to optimize, scoring overhead adds a few ms. p95/p99 improvement is the real signal.
+ 
+### Queue-Aware vs Round-Robin (v2 scoring, 15 RPS, long prompts (80% of requests))
+ 
+| Metric | Round-Robin | Queue-Aware | Delta |
+|--------|-------------|-------------|-------|
+| p50 | 6.54s | 3.53s | **−46%** |
+| p95 | 25.30s | 14.23s | **−44%** |
+| p99 | 35.61s | 26.45s | **−26%** |
+| avg | 8.87s | 4.87s | **−45%** |
+ 
+### Queue-Aware vs Round-Robin (v2 scoring, 25 RPS, long prompts (80% of requests))
+ 
+Both routers degrade equally above saturation. At 25 RPS the system is overwhelmed regardless of routing strategy — per-request scrape overhead makes QA slightly worse.
+ 
+| Metric | Round-Robin | Queue-Aware |
+|--------|-------------|-------------|
+| p50 | 18.6s | 21.7s |
+| p95 | 27.1s | 33.0s |
+| avg | 16.6s | 19.5s |
+
+
+---
+
 ## Stack
 
 | Component | Purpose |
@@ -183,5 +247,5 @@ This router is a from-scratch Go implementation of that same scoring idea — wi
 - [x] Layer 3 — Load generator + Grafana baseline
 - [x] Layer 4 — Go metrics client
 - [x] Layer 5 — Router with scoring function
-- [ ] Layer 6 — Helm chart + router metrics
+- [x] Layer 6 — Helm chart + router metrics
 - [ ] Layer 7 — Controlled benchmark, p99 TTFT comparison

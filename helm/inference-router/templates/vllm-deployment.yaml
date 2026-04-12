@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: simulator
-          image: "{{ .Values.vllm.image.repository }}:{{ .Values.vllm.image.tag }}"
+          image: '{{ .Values.vllm.image.repository }}:{{ .Values.vllm.image.tag | default "v0.8.0" }}'
           imagePullPolicy: {{ .Values.vllm.image.pullPolicy }}
           args:
             - "--model"

@@ -1,0 +1,9 @@
+main
+*.test
+coverage.out
+tmp/
+.git/
+**/*.md
+.git
+load_test/
+*.csv

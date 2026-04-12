@@ -14,10 +14,10 @@ spec:
     spec:
       containers:
       - name: router
-        image: llm-router:latest
+        image: llm-router:rr-12-apr
         imagePullPolicy: Never
         ports:
         - containerPort: 9000
         env:
-        - name: VLLM_SERVICE_HOST
+        - name: VLLM_DISCOVERY_HOST
           value: "vllm-headless.default.svc.cluster.local"

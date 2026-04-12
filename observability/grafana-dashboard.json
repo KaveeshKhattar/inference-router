@@ -90,7 +90,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{job=\"vllm\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{job=\"vllm\"}[2m])))",
           "legendFormat": "p50",
           "refId": "A"
         }
@@ -129,7 +129,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{job=\"vllm\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{job=\"vllm\"}[2m])))",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -168,7 +168,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{job=\"vllm\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le, pod) (rate(vllm:time_to_first_token_seconds_bucket{job=\"vllm\"}[2m])))",
           "legendFormat": "p99",
           "refId": "A"
         }
@@ -321,12 +321,322 @@
       },
       "targets": [
         {
-          "expr": "sum by (replica) (rate(router_requests_total[1m]))",
+          "expr": "sum by (replica) (rate(router_target_requests_total[1m]))",
           "legendFormat": "{{replica}}",
           "refId": "A"
         }
       ],
       "title": "Traffic Distribution by Router Target",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 2 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 18 },
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "max(vllm:num_requests_waiting{job=\"vllm\"}) - min(vllm:num_requests_waiting{job=\"vllm\"})",
+          "legendFormat": "max-min waiting",
+          "refId": "A"
+        }
+      ],
+      "title": "Queue Imbalance Index",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.2 },
+              { "color": "red", "value": 0.5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 18 },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "stddev(vllm:num_requests_running{job=\"vllm\"}) / clamp_min(avg(vllm:num_requests_running{job=\"vllm\"}), 0.001)",
+          "legendFormat": "running cv",
+          "refId": "A"
+        }
+      ],
+      "title": "Replica Running Load Skew (CV)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.15 },
+              { "color": "red", "value": 0.3 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 18 },
+      "id": 12,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "stddev(sum by (replica) (rate(router_target_requests_total[1m]))) / clamp_min(avg(sum by (replica) (rate(router_target_requests_total[1m]))), 0.001)",
+          "legendFormat": "router traffic cv",
+          "refId": "A"
+        }
+      ],
+      "title": "Router Traffic Skew (CV)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 25 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 23 },
+      "id": 13,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "router_queue_length",
+          "legendFormat": "observed queue length",
+          "refId": "A"
+        }
+      ],
+      "title": "Router Observed Queue Buildup",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 20 },
+              { "color": "red", "value": 60 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 23 },
+      "id": 14,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "router_inflight_requests",
+          "legendFormat": "in-flight",
+          "refId": "A"
+        }
+      ],
+      "title": "Router In-flight Requests",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 28 },
+      "id": 15,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (replica) (increase(router_target_requests_total[$__range]))",
+          "instant": true,
+          "legendFormat": "{{replica}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Requests Served by Replica (Selected Range)",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5000 },
+              { "color": "red", "value": 20000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 34 },
+      "id": 16,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "router_queue_length_tokens",
+          "legendFormat": "token queue depth",
+          "refId": "A"
+        }
+      ],
+      "title": "Router Token Queue Depth (Estimated)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 34 },
+      "id": 17,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (replica) (router_target_queue_length_tokens)",
+          "legendFormat": "{{replica}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Token Queue Depth by Replica (Estimated)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 40 },
+      "id": 18,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (replica) (rate(vllm:time_to_first_token_seconds_count{job=\"vllm\"}[1m]))",
+          "legendFormat": "{{replica}}",
+          "refId": "A"
+        }
+      ],
+      "title": "vLLM Request Rate by Replica (NEW)",
       "type": "timeseries"
     }
   ],
@@ -359,6 +669,6 @@
   "timezone": "",
   "title": "Project-01 Infra - Executive Summary",
   "uid": "project01-exec",
-  "version": 1,
+  "version": 6,
   "weekStart": ""
 }

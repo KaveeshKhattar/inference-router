@@ -6,5 +6,9 @@ spec:
   selector:
     app: inference-router
   ports:
-  - port: 80
-    targetPort: 9000
+    - name: proxy
+      port: 80
+      targetPort: 8080      # or whatever your router listens on
+    - name: metrics
+      port: 9000
+      targetPort: 9000

@@ -1,0 +1,186 @@
+{
+    "annotations": { "list": [] },
+    "editable": true,
+    "graphTooltip": 0,
+    "links": [],
+    "panels": [
+      {
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "fieldConfig": {
+          "defaults": { "unit": "reqps" },
+          "overrides": []
+        },
+        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+        "id": 1,
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        },
+        "targets": [
+          {
+            "expr": "sum by (replica) (rate(router_target_requests_total{job=\"inference-router\"}[1m]))",
+            "legendFormat": "{{replica}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Requests by Replica (req/s)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "fieldConfig": {
+          "defaults": { "unit": "short", "decimals": 0 },
+          "overrides": []
+        },
+        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+        "id": 2,
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        },
+        "targets": [
+          {
+            "expr": "sum by (replica) (increase(router_target_requests_total{job=\"inference-router\"}[$__range]))",
+            "instant": true,
+            "legendFormat": "{{replica}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Total Requests Sent by Router per Replica (Selected Range)",
+        "type": "barchart"
+      },
+      {
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "custom": { "lineWidth": 2, "fillOpacity": 10 },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 2 },
+                { "color": "red", "value": 5 }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+        "id": 3,
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "single" }
+        },
+        "targets": [
+          {
+            "expr": "max(sum by (replica) (rate(router_target_requests_total{job=\"inference-router\"}[1m]))) - min(sum by (replica) (rate(router_target_requests_total{job=\"inference-router\"}[1m])))",
+            "legendFormat": "imbalance (max - min)",
+            "refId": "A"
+          }
+        ],
+        "title": "Replica Request Imbalance (max - min req/s)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": { "lineWidth": 2, "fillOpacity": 10 }
+          },
+          "overrides": []
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+        "id": 4,
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        },
+        "targets": [
+          {
+            "expr": "sum by (replica) (vllm:num_requests_waiting{job=\"vllm\"})",
+            "legendFormat": "{{replica}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Queue Depth per Replica (waiting)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": { "lineWidth": 2, "fillOpacity": 10 }
+          },
+          "overrides": []
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+        "id": 5,
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        },
+        "targets": [
+          {
+            "expr": "sum(vllm:num_requests_waiting{job=\"vllm\"})",
+            "legendFormat": "total queue depth",
+            "refId": "A"
+          }
+        ],
+        "title": "Queue Depth over Time (aggregate)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": { "lineWidth": 2, "fillOpacity": 10 }
+          },
+          "overrides": []
+        },
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+        "id": 6,
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        },
+        "targets": [
+          {
+            "expr": "sum by (replica) (vllm:num_requests_running{job=\"vllm\"})",
+            "legendFormat": "{{replica}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Tokens in Flight per Replica (running requests)",
+        "type": "timeseries"
+      }
+    ],
+    "refresh": "10s",
+    "schemaVersion": 39,
+    "style": "dark",
+    "tags": ["inference", "router", "rr"],
+    "templating": {
+      "list": [
+        {
+          "hide": 0,
+          "includeAll": false,
+          "label": "datasource",
+          "multi": false,
+          "name": "DS_PROMETHEUS",
+          "options": [],
+          "query": "prometheus",
+          "refresh": 1,
+          "type": "datasource"
+        }
+      ]
+    },
+    "time": { "from": "now-15m", "to": "now" },
+    "timepicker": {},
+    "timezone": "",
+    "title": "Project-01 RR - Replica Distribution",
+    "uid": "project01-rr",
+    "version": 2
+  }

@@ -23,7 +23,7 @@ spec:
       serviceAccountName: {{ include "inference-router.serviceAccountName" . }}
       containers:
         - name: router
-          image: "{{ .Values.router.image.repository }}:{{ .Values.router.image.tag }}"
+          image: '{{ .Values.router.image.repository }}:{{ .Values.router.image.tag | default "latest" }}'
           imagePullPolicy: {{ .Values.router.image.pullPolicy }}
           ports:
             - name: http
@@ -45,8 +45,8 @@ spec:
               value: {{ .Values.router.env.ROUTER_PORT | quote }}
             - name: ROUTER_SCRAPE_TIMEOUT
               value: {{ .Values.router.env.ROUTER_SCRAPE_TIMEOUT | quote }}
-            - name: ROUTER_WEIGHT_RECALC_INTERVAL
-              value: {{ .Values.router.env.ROUTER_WEIGHT_RECALC_INTERVAL | quote }}
+            - name: ROUTER_LOAD_REFRESH
+              value: {{ .Values.router.env.ROUTER_LOAD_REFRESH | quote }}
             - name: ROUTER_WEIGHT_SNAPSHOT_ENABLED
               value: {{ .Values.router.env.ROUTER_WEIGHT_SNAPSHOT_ENABLED | quote }}
             - name: ROUTER_WEIGHT_SNAPSHOT_INTERVAL
