@@ -5,72 +5,71 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"time"
+	"sync"
 
-	"router/discovery"
 	"router/metrics"
 	"router/selector"
 )
 
-// pendingTracker is the narrow interface proxy needs from QueueAware
-// (or any selector that wants to track in-flight state).
-type pendingTracker interface {
-	GetPending(replica string) interface{ Add(int64) int64; Load() int64 }
-	GetPendingTokens(replica string) interface{ Add(int64) int64; Load() int64 }
+// Handler forwards requests to the replica chosen by s.
+// ReverseProxy instances are constructed once per replica and reused.
+type Handler struct {
+	s      selector.Selector
+	mu     sync.RWMutex
+	proxies map[string]*httputil.ReverseProxy
 }
 
-func Handle(s selector.Selector, w http.ResponseWriter, r *http.Request) {
-	replicas := discovery.GetCachedEndpoints()
-	if len(replicas) == 0 {
-		log.Printf("discovery returned 0 replicas")
-		http.Error(w, "no replicas discovered via DNS", http.StatusServiceUnavailable)
-		return
+func NewHandler(s selector.Selector) *Handler {
+	return &Handler{
+		s:       s,
+		proxies: make(map[string]*httputil.ReverseProxy),
 	}
+}
 
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	tokens := estimateRequestTokensAndRestoreBody(r)
 
-	start := time.Now()
-	chosen, score := s.Pick(replicas, tokens)
-	metrics.RoutingLatency.Observe(time.Since(start).Seconds())
-
+	chosen, score := h.s.Pick()
 	if chosen == "" {
-		log.Printf("no healthy replica among: %v", replicas)
+		log.Printf("proxy: no healthy replicas available")
 		http.Error(w, "no healthy replicas", http.StatusServiceUnavailable)
 		return
 	}
 
-	log.Printf("routing to %s tokens=%d score=%.2f", chosen, tokens, score)
-	proxyTo(w, r, chosen, tokens, s)
-}
+	log.Printf("proxy: routing to %s score=%.2f", chosen, score)
 
-func proxyTo(w http.ResponseWriter, r *http.Request, replica string, tokens int64, s selector.Selector) {
 	metrics.RouterRequestsTotal.Inc()
-	metrics.RouterTargetRequestsTotal.WithLabelValues(replica).Inc()
-
-	target, err := url.Parse(replica)
-	if err != nil {
-		http.Error(w, "invalid upstream target", http.StatusInternalServerError)
-		return
-	}
-
-	// Track in-flight state only if the selector supports it.
-	if pt, ok := s.(pendingTracker); ok {
-		p := pt.GetPending(replica)
-		p.Add(1)
-		defer p.Add(-1)
-
-		pt2 := pt.GetPendingTokens(replica)
-		pt2.Add(tokens)
-		defer pt2.Add(-tokens)
-	}
-
+	metrics.RouterTargetRequestsTotal.WithLabelValues(chosen).Inc()
 	metrics.RouterInflightRequests.Inc()
 	defer metrics.RouterInflightRequests.Dec()
-	metrics.RouterQueueLengthTokens.Add(float64(tokens))
-	defer metrics.RouterQueueLengthTokens.Sub(float64(tokens))
-	metrics.RouterTargetQueueLengthTokens.WithLabelValues(replica).Add(float64(tokens))
-	defer metrics.RouterTargetQueueLengthTokens.WithLabelValues(replica).Sub(float64(tokens))
 	
+	h.s.OnRequestStart(chosen, tokens)
+	defer h.s.OnRequestFinish(chosen, tokens)
 
-	httputil.NewSingleHostReverseProxy(target).ServeHTTP(w, r)
+	h.proxyFor(chosen).ServeHTTP(w, r)
+}
+
+// proxyFor returns the cached ReverseProxy for a replica, creating it if needed.
+func (h *Handler) proxyFor(replicaURL string) *httputil.ReverseProxy {
+	h.mu.RLock()
+	rp, ok := h.proxies[replicaURL]
+	h.mu.RUnlock()
+	if ok {
+		return rp
+	}
+
+	target, err := url.Parse(replicaURL)
+	if err != nil {
+		// Should never happen — URLs come from DNS + scrape pipeline.
+		log.Printf("proxy: invalid replica URL %q: %v", replicaURL, err)
+		return httputil.NewSingleHostReverseProxy(target)
+	}
+
+	rp = httputil.NewSingleHostReverseProxy(target)
+
+	h.mu.Lock()
+	h.proxies[replicaURL] = rp
+	h.mu.Unlock()
+
+	return rp
 }

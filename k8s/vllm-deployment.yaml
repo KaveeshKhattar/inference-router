@@ -5,7 +5,7 @@ metadata:
   labels:
     app: vllm
 spec:
-  replicas: 4
+  replicas: 2
   selector:
     matchLabels:
       app: vllm
@@ -43,10 +43,10 @@ spec:
           - "0.01ms"
 
           - "--inter-token-latency"
-          - "20ms"
+          - "15ms"
 
           - "--inter-token-latency-std-dev"
-          - "4ms"
+          - "3ms"
           
           - "--time-factor-under-load"
           - "1.5"

@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"router/discovery"
 	"router/metrics"
 	"router/proxy"
@@ -14,27 +16,36 @@ import (
 )
 
 func main() {
-	scrapeTimeout  := util.GetEnvDuration("ROUTER_SCRAPE_TIMEOUT", util.DefaultScrapeTimeout)
-	routerPort     := util.GetEnvInt("ROUTER_PORT", util.DefaultRouterPort)
-	refreshInterval := util.GetEnvDuration("ROUTER_LOAD_REFRESH", util.DefaultLoadRecalc)
-	localWeight    := util.GetEnvFloat("ROUTER_LOCAL_PENDING_WEIGHT", util.DefaultLocalWeight)
+	metrics.Register()
 
-	client := &http.Client{Timeout: scrapeTimeout}
+	client := &http.Client{
+		Timeout: util.GetEnvDuration("ROUTER_SCRAPE_TIMEOUT", util.DefaultScrapeTimeout),
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: 4,
+			IdleConnTimeout:     90 * time.Second,
+		},
+	}
 
 	// ── swap this one line to change strategy ──────────────────────────
-	var s selector.Selector = selector.NewQueueAware(localWeight)
+	var s selector.Selector = selector.NewTokenAware()
 	// ───────────────────────────────────────────────────────────────────
 
-	discovery.StartBackgroundRefresh(client, s, refreshInterval)
+	discovery.StartBackgroundRefresh(
+		client,
+		s,
+		util.GetEnvDuration("ROUTER_LOAD_REFRESH", util.DefaultLoadRecalc),
+	)
 
-	http.Handle("/metrics", promhttp.Handler())
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		proxy.Handle(s, w, r)
-	})
+	handler := proxy.NewHandler(s)
 
-	addr := fmt.Sprintf(":%d", routerPort)
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.Handle("/healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	mux.Handle("/", handler)
+
+	addr := fmt.Sprintf(":%d", util.GetEnvInt("ROUTER_PORT", util.DefaultRouterPort))
 	log.Printf("router listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	log.Fatal(http.ListenAndServe(addr, mux))
 }
-
-func init() { metrics.Register() }

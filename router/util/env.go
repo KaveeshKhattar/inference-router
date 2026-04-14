@@ -14,7 +14,6 @@ const (
 	DefaultDiscoveryHost = "vllm-headless.default.svc.cluster.local"
 	DefaultScrapeTimeout = 1500 * time.Millisecond
 	DefaultLoadRecalc    = 1 * time.Second
-	DefaultLocalWeight   = 1.0
 )
 
 func GetEnvString(name, fallback string) string {

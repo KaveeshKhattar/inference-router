@@ -171,7 +171,7 @@ async def send_request(
         async with session.post(url, json=payload, timeout=timeout) as resp:
             first_byte_started = time.perf_counter()
             first_chunk = await resp.content.read(1)
-            ttfb_s = first_byte_started - started
+            ttfb_s = time.perf_counter() - started
             if first_chunk:
                 await resp.read()
             ended = time.perf_counter()
