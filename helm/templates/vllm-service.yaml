@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-sim-service
+spec:
+  type: {{ .Values.vllm.serviceType }}
+  selector:
+    app: vllm
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-headless
+  labels:
+    app: vllm
+spec:
+  clusterIP: None  # This makes it "Headless"
+  selector:
+    app: vllm   # Must match the labels on your vLLM pods
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000

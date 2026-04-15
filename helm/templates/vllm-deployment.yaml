@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  labels:
+    app: vllm
+spec:
+  replicas: {{ .Values.vllm.replicas }}
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+    spec:
+      containers:
+      - name: simulator
+        image: {{ .Values.vllm.image }}
+        args:
+          - "--model"
+          - "{{ .Values.vllm.model }}"
+
+          - "--port"
+          - "{{ .Values.vllm.port }}"
+          
+          - "--max-num-seqs"
+          - "{{ .Values.vllm.maxNumSeqs }}"
+         
+          - "--max-waiting-queue-length"
+          - "{{ .Values.vllm.maxQueueLength }}"
+
+          - "--max-model-len"
+          - "{{ .Values.vllm.maxModelLen }}"
+
+          - "--prefill-overhead"
+          - "{{ .Values.vllm.prefillOverhead }}"
+
+          - "--prefill-time-per-token"
+          - "{{ .Values.vllm.prefillTimePerToken }}"
+
+          - "--prefill-time-std-dev"
+          - "{{ .Values.vllm.prefillTimePerTokenStdDev }}"
+
+          - "--inter-token-latency"
+          - "{{ .Values.vllm.interTokenLatency }}"
+
+          - "--inter-token-latency-std-dev"
+          - "{{ .Values.vllm.interTokenLatencyStdDev }}"
+          
+          - "--time-factor-under-load"
+          - "{{ .Values.vllm.timeFactorUnderLoad }}"
+
+        ports:
+        - containerPort: 8000
+          name: http
+
+        # Kubernetes liveness probe — restarts the pod if /health stops
+        # responding. Mirrors how production inference deployments are
+        # monitored. Not strictly required for the experiment but makes
+        # this a production-representative manifest.
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+        # Resource requests intentionally omitted — this is a simulator
+        # with no GPU requirement. In a production manifest targeting
+        # real vLLM, you would request nvidia.com/gpu: 1 here and set
+        # memory limits reflecting VRAM budget.
