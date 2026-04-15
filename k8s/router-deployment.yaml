@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: router
-        image: llm-router:token-count-qa-15-apr
+        image: llm-router:rr-13-apr
         imagePullPolicy: Never
         ports:
         - containerPort: 9000

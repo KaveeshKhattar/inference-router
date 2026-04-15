@@ -23,6 +23,14 @@ var (
 		Help:    "Time to compute routing decision",
 		Buckets: []float64{.0001, .0005, .001, .005, .01},
 	})
+
+	RouterTimeoutTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "router_timeout_total",
+			Help: "Total number of request timeouts",
+		},
+		[]string{"target"}, // target URL
+	)
 )
 
 func Register() {
@@ -31,5 +39,6 @@ func Register() {
 		RouterTargetRequestsTotal,
 		RouterInflightRequests,
 		RoutingLatency,
+		RouterTimeoutTotal,
 	)
 }

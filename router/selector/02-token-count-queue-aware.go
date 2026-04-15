@@ -3,8 +3,11 @@ package selector
 import (
 	"math"
 	"sync"
+	"time"
 
 	"router/discovery"
+	"log"
+	"fmt"
 )
 
 type tokenReplica struct {
@@ -62,8 +65,11 @@ func (t *TokenAware) Pick() (string, float64) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
+	
 	bestURL := ""
 	bestScore := math.MaxFloat64
+
+	start := time.Now()
 
 	for _, r := range t.replicas {
 		if !r.healthy {
@@ -77,6 +83,30 @@ func (t *TokenAware) Pick() (string, float64) {
 			bestURL = r.url
 		}
 	}
+
+	elapsed := time.Since(start)
+
+
+	var logMsg string
+	if bestURL == "" {
+		logMsg = "Pick: no healthy replicas"
+	} else {
+		logMsg = "Pick: loads ["
+		for _, r := range t.replicas {
+			if !r.healthy {
+				continue
+			}
+			marker := " "
+			if r.url == bestURL {
+				marker = "*"
+			}
+			logMsg += marker + r.url + "=" + fmt.Sprintf("%.2f", r.tokenLoad) + " "
+		}
+		logMsg += "] selected " + bestURL + " (load=" + fmt.Sprintf("%.2f", bestScore) + ")"
+	}
+	
+    logMsg += fmt.Sprintf(" | took %s", elapsed)
+    log.Println(logMsg)
 
 	if bestURL == "" {
 		return "", 0

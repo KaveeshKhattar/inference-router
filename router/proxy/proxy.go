@@ -1,11 +1,14 @@
 package proxy
 
 import (
+	"time"
+	"strings"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"sync"
+	
 
 	"router/metrics"
 	"router/selector"
@@ -17,12 +20,14 @@ type Handler struct {
 	s      selector.Selector
 	mu     sync.RWMutex
 	proxies map[string]*httputil.ReverseProxy
+	requestTimeout time.Duration
 }
 
-func NewHandler(s selector.Selector) *Handler {
+func NewHandler(s selector.Selector, timeout time.Duration) *Handler {
 	return &Handler{
 		s:       s,
 		proxies: make(map[string]*httputil.ReverseProxy),
+		requestTimeout: timeout,
 	}
 }
 
@@ -46,7 +51,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.s.OnRequestStart(chosen, tokens)
 	defer h.s.OnRequestFinish(chosen, tokens)
 
-	h.proxyFor(chosen).ServeHTTP(w, r)
+    h.proxyFor(chosen).ServeHTTP(w, r)
 }
 
 // proxyFor returns the cached ReverseProxy for a replica, creating it if needed.
@@ -66,6 +71,22 @@ func (h *Handler) proxyFor(replicaURL string) *httputil.ReverseProxy {
 	}
 
 	rp = httputil.NewSingleHostReverseProxy(target)
+
+	if h.requestTimeout > 0 {
+		rp.Transport = &http.Transport{
+			ResponseHeaderTimeout: h.requestTimeout,
+		}
+	}
+
+	rp.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
+		log.Printf("proxy: timeout/error for %s: %v", req.URL, err)
+		if err != nil && strings.Contains(err.Error(), "timeout") {
+			metrics.RouterTimeoutTotal.WithLabelValues(replicaURL).Inc()
+			http.Error(rw, "Gateway Timeout", http.StatusGatewayTimeout)
+			return
+		}
+		http.Error(rw, "Bad Gateway", http.StatusBadGateway)
+	}
 
 	h.mu.Lock()
 	h.proxies[replicaURL] = rp

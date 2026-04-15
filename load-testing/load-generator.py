@@ -163,6 +163,7 @@ async def send_request(
         "model": model,
         "messages": [{"role": "user", "content": generate_prompt(prompt_tokens)}],
         "max_tokens": max_tokens,
+        "stream": True
     }
 
     started = time.perf_counter()

@@ -36,7 +36,7 @@ func main() {
 		util.GetEnvDuration("ROUTER_LOAD_REFRESH", util.DefaultLoadRecalc),
 	)
 
-	handler := proxy.NewHandler(s)
+	handler := proxy.NewHandler(s, 3*time.Second)
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
