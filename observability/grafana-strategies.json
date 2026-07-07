@@ -1,0 +1,177 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "options": {
+        "code": { "language": "plaintext", "showLineNumbers": false, "showMiniMap": false },
+        "content": "# Layer 14 — Strategy Comparison\n\nRun each experiment from `load-testing/experiments.yaml`, then screenshot TTFT panels below.\nGenerate CSV comparison tables with:\n`python load-testing/summarize_results.py --write load-testing/results/RESULTS.md`",
+        "mode": "markdown"
+      },
+      "title": "Instructions",
+      "type": "text"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 3 },
+      "id": 1,
+      "targets": [{ "expr": "sum(rate(router_requests_total[1m]))", "legendFormat": "router rps", "refId": "A" }],
+      "title": "Router throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 3 },
+      "id": 2,
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket[2m])))",
+        "legendFormat": "p95 TTFT",
+        "refId": "A"
+      }],
+      "title": "Simulator TTFT p95 (all replicas)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 3 },
+      "id": 3,
+      "targets": [{
+        "expr": "histogram_quantile(0.50, sum by (le) (rate(router_admission_wait_seconds_bucket[2m])))",
+        "legendFormat": "p50 wait",
+        "refId": "A"
+      }],
+      "title": "Admission wait p50 (Layer 11)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 3 },
+      "id": 4,
+      "targets": [
+        { "expr": "router_admission_queue_depth", "legendFormat": "queue depth", "refId": "A" },
+        { "expr": "router_admission_low_priority_debt", "legendFormat": "low-priority debt", "refId": "B" }
+      ],
+      "title": "Admission queue + debt",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 },
+      "id": 200,
+      "title": "Per-replica load (queue-aware vs round-robin visible here)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "id": 5,
+      "targets": [{
+        "expr": "vllm:num_requests_waiting",
+        "legendFormat": "{{instance}}",
+        "refId": "A"
+      }],
+      "title": "Queue depth per replica",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "id": 6,
+      "targets": [{
+        "expr": "vllm:num_requests_running",
+        "legendFormat": "{{instance}}",
+        "refId": "A"
+      }],
+      "title": "Running requests per replica",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "id": 201,
+      "title": "Router target distribution (cache-aware should skew under shared prefix)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 18 },
+      "id": 7,
+      "targets": [{
+        "expr": "sum by (replica) (rate(router_target_requests_total[2m]))",
+        "legendFormat": "{{replica}}",
+        "refId": "A"
+      }],
+      "title": "RPS per replica (router_target_requests_total)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
+      "id": 202,
+      "title": "Disaggregated mode (Layer 13) — prefill vs decode pods",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 27 },
+      "id": 8,
+      "targets": [{
+        "expr": "sum by (replica) (rate(router_target_requests_total[2m]))",
+        "legendFormat": "{{replica}}",
+        "refId": "A"
+      }],
+      "description": "With ROUTER_PD_ENABLED=1, each client request generates traffic to both a prefill and decode pod.",
+      "title": "Target RPS (prefill + decode pools)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 27 },
+      "id": 9,
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum by (le, instance) (rate(vllm:time_to_first_token_seconds_bucket[2m])))",
+        "legendFormat": "{{instance}} p95",
+        "refId": "A"
+      }],
+      "title": "TTFT p95 per pod (compare P/D pools)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["inference-router", "layer-14", "benchmark"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Inference Router — Strategy Benchmark (Layer 14)",
+  "uid": "inference-router-strategies",
+  "version": 1
+}

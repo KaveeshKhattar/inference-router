@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"router/discovery"
+	"router/prepare"
 	"log"
 	"fmt"
 )
@@ -61,7 +62,7 @@ func (t *TokenAware) Update(healths []discovery.ReplicaHealth) {
 }
 
 // Pick chooses the replica with the lowest score.
-func (t *TokenAware) Pick() (string, float64) {
+func (t *TokenAware) Pick(_ *prepare.RequestContext) (string, float64) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 

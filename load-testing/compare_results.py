@@ -104,35 +104,47 @@ def print_summary(s: Summary) -> None:
 
 
 def print_delta(baseline: Summary, candidate: Summary) -> None:
+    b_lp50 = quantile(baseline.latency_values, 0.50)
+    c_lp50 = quantile(candidate.latency_values, 0.50)
     b_lp95 = quantile(baseline.latency_values, 0.95)
     c_lp95 = quantile(candidate.latency_values, 0.95)
     b_lp99 = quantile(baseline.latency_values, 0.99)
     c_lp99 = quantile(candidate.latency_values, 0.99)
     b_lavg = mean(baseline.latency_values)
     c_lavg = mean(candidate.latency_values)
+
+    b_tp50 = quantile(baseline.ttfb_values, 0.50)
+    c_tp50 = quantile(candidate.ttfb_values, 0.50)
+    b_tp95 = quantile(baseline.ttfb_values, 0.95)
+    c_tp95 = quantile(candidate.ttfb_values, 0.95)
+    b_tp99 = quantile(baseline.ttfb_values, 0.99)
+    c_tp99 = quantile(candidate.ttfb_values, 0.99)
+    b_tavg = mean(baseline.ttfb_values)
+    c_tavg = mean(candidate.ttfb_values)
+
     b_s = baseline.success_rate
     c_s = candidate.success_rate
 
-    p95_delta = c_lp95 - b_lp95
-    p99_delta = c_lp99 - b_lp99
-    avg_delta = c_lavg - b_lavg
-    success_delta = c_s - b_s
+    print("\n=== Candidate vs Baseline (latency) ===")
+    for label, b, c in [
+        ("p50", b_lp50, c_lp50),
+        ("p95", b_lp95, c_lp95),
+        ("p99", b_lp99, c_lp99),
+        ("avg", b_lavg, c_lavg),
+    ]:
+        print(f"latency_{label}_delta={fmt_seconds(c - b)} ({pct_change(b, c):+.2f}%)")
 
-    print("\n=== Candidate vs Baseline ===")
-    print(
-        f"latency_p95_delta={fmt_seconds(p95_delta)} "
-        f"({pct_change(b_lp95, c_lp95):+.2f}%)"
-    )
-    print(
-        f"latency_p99_delta={fmt_seconds(p99_delta)} "
-        f"({pct_change(b_lp99, c_lp99):+.2f}%)"
-    )
-    print(
-        f"latency_avg_delta={fmt_seconds(avg_delta)} "
-        f"({pct_change(b_lavg, c_lavg):+.2f}%)"
-    )
-    print(f"success_rate_delta={success_delta:+.2f}pp")
-    print("\nInterpretation: negative latency deltas are better.")
+    print("\n=== Candidate vs Baseline (TTFT) ===")
+    for label, b, c in [
+        ("p50", b_tp50, c_tp50),
+        ("p95", b_tp95, c_tp95),
+        ("p99", b_tp99, c_tp99),
+        ("avg", b_tavg, c_tavg),
+    ]:
+        print(f"ttfb_{label}_delta={fmt_seconds(c - b)} ({pct_change(b, c):+.2f}%)")
+
+    print(f"\nsuccess_rate_delta={c_s - b_s:+.2f}pp")
+    print("\nInterpretation: negative latency/TTFT deltas are better.")
 
 
 def main() -> None:

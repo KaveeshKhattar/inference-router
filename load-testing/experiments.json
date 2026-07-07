@@ -1,0 +1,107 @@
+{
+  "defaults": {
+    "url": "http://localhost:9000/v1/chat/completions",
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
+    "rps": 15,
+    "duration_seconds": 180,
+    "warmup_seconds": 30,
+    "timeout_seconds": 120,
+    "max_in_flight": 256,
+    "shared_prefix": true,
+    "min_prompt_tokens": 8,
+    "priority_high_fraction": 0.0,
+    "results_dir": "load-testing/results"
+  },
+  "experiments": [
+    {
+      "id": "round-robin",
+      "name": "Round-Robin Baseline",
+      "talk": "Routing Is Not Load Balancing",
+      "baseline": true,
+      "router_env": {
+        "ROUTER_STRATEGY": "round-robin",
+        "ROUTER_PD_ENABLED": "0",
+        "ROUTER_ADMISSION_ENABLED": "0"
+      },
+      "csv": "exp-round-robin-rps15.csv"
+    },
+    {
+      "id": "queue-aware",
+      "name": "Queue-Aware (v2 token load)",
+      "talk": "Routing Is Not Load Balancing",
+      "router_env": {
+        "ROUTER_STRATEGY": "queue-aware",
+        "ROUTER_PD_ENABLED": "0",
+        "ROUTER_ADMISSION_ENABLED": "0"
+      },
+      "csv": "exp-queue-aware-rps15.csv"
+    },
+    {
+      "id": "cache-aware",
+      "name": "Cache + Queue Aware",
+      "talk": "Routing Is Not Load Balancing / KV Cache Is Not a Cache",
+      "router_env": {
+        "ROUTER_STRATEGY": "cache-aware",
+        "ROUTER_SCORE_CACHE_WEIGHT": "0.7",
+        "ROUTER_SCORE_LOAD_WEIGHT": "0.3",
+        "ROUTER_PD_ENABLED": "0",
+        "ROUTER_ADMISSION_ENABLED": "0"
+      },
+      "csv": "exp-cache-aware-rps15.csv"
+    },
+    {
+      "id": "cache-admission",
+      "name": "Cache-Aware + Admission Control",
+      "talk": "Control Plane Under Load",
+      "rps": 25,
+      "priority_high_fraction": 0.2,
+      "router_env": {
+        "ROUTER_STRATEGY": "cache-aware",
+        "ROUTER_ADMISSION_ENABLED": "1",
+        "ROUTER_ADMISSION_POD_CAPACITY": "4",
+        "ROUTER_PD_ENABLED": "0"
+      },
+      "csv": "exp-cache-admission-rps25.csv"
+    },
+    {
+      "id": "admission-off",
+      "name": "Cache-Aware Without Admission (overload baseline)",
+      "talk": "Control Plane Under Load",
+      "rps": 25,
+      "priority_high_fraction": 0.2,
+      "router_env": {
+        "ROUTER_STRATEGY": "cache-aware",
+        "ROUTER_ADMISSION_ENABLED": "0",
+        "ROUTER_PD_ENABLED": "0"
+      },
+      "csv": "exp-no-admission-rps25.csv"
+    },
+    {
+      "id": "disaggregated-long",
+      "name": "Disaggregated Prefill/Decode (long context)",
+      "talk": "KV Cache / Disaggregated Inference",
+      "rps": 8,
+      "min_prompt_tokens": 1024,
+      "shared_prefix": true,
+      "router_env": {
+        "ROUTER_PD_ENABLED": "1",
+        "ROUTER_ADMISSION_ENABLED": "0"
+      },
+      "csv": "exp-pd-long-rps8.csv"
+    },
+    {
+      "id": "aggregated-long",
+      "name": "Aggregated Single-Pod (long context baseline)",
+      "talk": "KV Cache / Disaggregated Inference",
+      "rps": 8,
+      "min_prompt_tokens": 1024,
+      "shared_prefix": true,
+      "router_env": {
+        "ROUTER_STRATEGY": "cache-aware",
+        "ROUTER_PD_ENABLED": "0",
+        "ROUTER_ADMISSION_ENABLED": "0"
+      },
+      "csv": "exp-aggregated-long-rps8.csv"
+    }
+  ]
+}

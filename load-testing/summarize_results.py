@@ -1,0 +1,259 @@
+#!/usr/bin/env python3
+"""Summarize Layer 14 benchmark CSVs into RESULTS.md tables."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+EXPERIMENTS_FILE = ROOT / "load-testing" / "experiments.json"
+
+
+@dataclass
+class Stats:
+    name: str
+    exp_id: str
+    talk: str
+    total: int = 0
+    success: int = 0
+    errors: int = 0
+    latency: list[float] = field(default_factory=list)
+    ttfb: list[float] = field(default_factory=list)
+    ttfb_high: list[float] = field(default_factory=list)
+    ttfb_low: list[float] = field(default_factory=list)
+    rps: float = 0.0
+    exists: bool = False
+
+
+def quantile(values: list[float], q: float) -> float:
+    if not values:
+        return 0.0
+    s = sorted(values)
+    idx = min(len(s) - 1, int(round((len(s) - 1) * q)))
+    return s[idx]
+
+
+def mean(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+def pct_change(old: float, new: float) -> str:
+    if math.isclose(old, 0.0):
+        return "—"
+    delta = ((new - old) / old) * 100.0
+    return f"{delta:+.0f}%"
+
+
+def load_csv(path: Path, name: str, exp_id: str, talk: str, rps: float) -> Stats:
+    import csv
+
+    s = Stats(name=name, exp_id=exp_id, talk=talk, rps=rps)
+    if not path.exists():
+        return s
+    s.exists = True
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            s.total += 1
+            ok = row.get("ok", "0").strip() in ("1", "true", "True")
+            if not ok:
+                s.errors += 1
+                continue
+            s.success += 1
+            s.latency.append(float(row["latency_s"]))
+            ttfb = float(row.get("ttfb_s", "-1"))
+            if ttfb >= 0:
+                s.ttfb.append(ttfb)
+                pri = row.get("priority", "low")
+                if pri == "high":
+                    s.ttfb_high.append(ttfb)
+                else:
+                    s.ttfb_low.append(ttfb)
+    return s
+
+
+def fmt_s(x: float) -> str:
+    return f"{x:.2f}s"
+
+
+def row_metrics(s: Stats) -> dict[str, str]:
+    return {
+        "p50": fmt_s(quantile(s.ttfb, 0.50)),
+        "p95": fmt_s(quantile(s.ttfb, 0.95)),
+        "p99": fmt_s(quantile(s.ttfb, 0.99)),
+        "avg": fmt_s(mean(s.ttfb)),
+        "success": f"{100.0 * s.success / s.total:.1f}%" if s.total else "—",
+    }
+
+
+def comparison_table(baseline: Stats, others: list[Stats]) -> list[str]:
+    lines = [
+        "",
+        f"### TTFT comparison vs {baseline.name} @ {baseline.rps:.0f} RPS",
+        "",
+        "| Metric | " + " | ".join([baseline.name] + [o.name for o in others]) + " |",
+        "|--------|" + "|".join(["--------"] * (1 + len(others))) + "|",
+    ]
+    for key, label in [("p50", "p50"), ("p95", "p95"), ("p99", "p99"), ("avg", "avg")]:
+        b = row_metrics(baseline)[key]
+        cells = [b]
+        b_val = quantile(baseline.ttfb, {"p50": 0.5, "p95": 0.95, "p99": 0.99, "avg": -1}[key]) if key != "avg" else mean(baseline.ttfb)
+        for o in others:
+            o_val = quantile(o.ttfb, {"p50": 0.5, "p95": 0.95, "p99": 0.99, "avg": -1}[key]) if key != "avg" else mean(o.ttfb)
+            if not o.exists:
+                cells.append("—")
+            elif key == "p95" or key == "p99":
+                cells.append(f"{fmt_s(o_val)} ({pct_change(b_val, o_val)})")
+            else:
+                cells.append(fmt_s(o_val))
+        lines.append(f"| {label} | " + " | ".join(cells) + " |")
+    return lines
+
+
+def priority_table(s: Stats) -> list[str]:
+    if not s.ttfb_high and not s.ttfb_low:
+        return []
+    lines = [
+        "",
+        f"#### Priority breakdown — {s.name}",
+        "",
+        "| Priority | count | ttfb p50 | ttfb p95 | ttfb p99 |",
+        "|----------|-------|----------|----------|----------|",
+    ]
+    for label, vals in [("high", s.ttfb_high), ("low", s.ttfb_low)]:
+        if not vals:
+            continue
+        lines.append(
+            f"| {label} | {len(vals)} | {fmt_s(quantile(vals, 0.5))} | "
+            f"{fmt_s(quantile(vals, 0.95))} | {fmt_s(quantile(vals, 0.99))} |"
+        )
+    return lines
+
+
+def build_markdown(cfg: dict, results_dir: Path) -> str:
+    defaults = cfg.get("defaults", {})
+    experiments = cfg.get("experiments", [])
+    stats_list: list[Stats] = []
+
+    for exp in experiments:
+        csv_name = exp.get("csv", f"exp-{exp['id']}.csv")
+        csv_path = results_dir / csv_name
+        merged_rps = exp.get("rps", defaults.get("rps", 15))
+        stats_list.append(
+            load_csv(
+                csv_path,
+                exp.get("name", exp["id"]),
+                exp["id"],
+                exp.get("talk", ""),
+                merged_rps,
+            )
+        )
+
+    lines = [
+        "# Layer 14 Benchmark Results",
+        "",
+        "Auto-generated by `python load-testing/summarize_results.py --write load-testing/results/RESULTS.md`.",
+        "",
+        "Re-run experiments with `load-testing/run_suite.sh` or `run_experiment.py --id <name>`.",
+        "",
+        "## Experiment matrix",
+        "",
+        "| ID | Strategy | RPS | Shared prefix | CSV | Status |",
+        "|----|----------|-----|---------------|-----|--------|",
+    ]
+
+    for exp, s in zip(experiments, stats_list):
+        sp = "yes" if exp.get("shared_prefix", defaults.get("shared_prefix")) else "no"
+        rps = exp.get("rps", defaults.get("rps", 15))
+        status = "done" if s.exists else "pending"
+        lines.append(
+            f"| `{exp['id']}` | {exp.get('name', exp['id'])} | {rps} | {sp} | `{exp.get('csv', '')}` | {status} |"
+        )
+
+    # Routing talk: rr vs queue vs cache @ 15 RPS
+    routing_ids = ["round-robin", "queue-aware", "cache-aware"]
+    routing = [s for s in stats_list if s.exp_id in routing_ids and s.exists]
+    if len(routing) >= 2:
+        baseline = next((s for s in routing if s.exp_id == "round-robin"), routing[0])
+        others = [s for s in routing if s is not baseline]
+        lines.append("")
+        lines.append("## Routing Is Not Load Balancing")
+        lines.extend(comparison_table(baseline, others))
+
+    # Admission talk
+    adm = [s for s in stats_list if s.exp_id in ("admission-off", "cache-admission") and s.exists]
+    if len(adm) == 2:
+        baseline = next(s for s in adm if s.exp_id == "admission-off")
+        candidate = next(s for s in adm if s.exp_id == "cache-admission")
+        lines.append("")
+        lines.append("## Control Plane Under Load (admission @ 25 RPS)")
+        lines.extend(comparison_table(baseline, [candidate]))
+        lines.extend(priority_table(baseline))
+        lines.extend(priority_table(candidate))
+
+    # P/D talk
+    pd = [s for s in stats_list if s.exp_id in ("aggregated-long", "disaggregated-long") and s.exists]
+    if len(pd) == 2:
+        baseline = next(s for s in pd if s.exp_id == "aggregated-long")
+        candidate = next(s for s in pd if s.exp_id == "disaggregated-long")
+        lines.append("")
+        lines.append("## Disaggregated vs Aggregated (long context @ 8 RPS)")
+        lines.extend(comparison_table(baseline, [candidate]))
+
+    lines.append("")
+    lines.append("## Per-experiment summaries")
+    for s in stats_list:
+        if not s.exists:
+            continue
+        m = row_metrics(s)
+        lines.extend(
+            [
+                "",
+                f"### {s.name} (`{s.exp_id}`)",
+                "",
+                f"- Talk: {s.talk}",
+                f"- Requests: {s.total} ({m['success']} success)",
+                f"- TTFT: p50={m['p50']} p95={m['p95']} p99={m['p99']} avg={m['avg']}",
+            ]
+        )
+        lines.extend(priority_table(s))
+
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Summarize benchmark CSVs to markdown.")
+    parser.add_argument(
+        "--write",
+        default="",
+        help="Write markdown to this path (default: stdout only)",
+    )
+    parser.add_argument(
+        "--results-dir",
+        default="load-testing/results",
+        help="Directory containing experiment CSV files",
+    )
+    args = parser.parse_args()
+
+    with open(EXPERIMENTS_FILE, encoding="utf-8") as f:
+        cfg = json.load(f)
+
+    results_dir = ROOT / args.results_dir
+    md = build_markdown(cfg, results_dir)
+
+    if args.write:
+        out = ROOT / args.write
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(md, encoding="utf-8")
+        print(f"Wrote {out}")
+    else:
+        print(md)
+
+
+if __name__ == "__main__":
+    main()

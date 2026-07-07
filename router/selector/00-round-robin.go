@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"router/discovery"
+	"router/prepare"
 )
 
 // RoundRobin cycles through healthy replicas ignoring load.
@@ -36,7 +37,7 @@ func (rr *RoundRobin) Update(healths []discovery.ReplicaHealth) {
 }
 
 // Pick returns the next replica in round-robin order.
-func (rr *RoundRobin) Pick() (string, float64) {
+func (rr *RoundRobin) Pick(_ *prepare.RequestContext) (string, float64) {
 	rr.mu.RLock()
 	c := rr.candidates
 	rr.mu.RUnlock()
@@ -48,3 +49,6 @@ func (rr *RoundRobin) Pick() (string, float64) {
 	idx := rr.counter.Add(1) - 1
 	return c[idx%uint64(len(c))], 0
 }
+
+func (rr *RoundRobin) OnRequestStart(string, float64) {}
+func (rr *RoundRobin) OnRequestFinish(string, float64) {}

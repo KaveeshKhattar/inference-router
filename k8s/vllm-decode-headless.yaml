@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-decode-headless
+spec:
+  clusterIP: None
+  selector:
+    app: vllm-decode
+    llm-d.ai/role: decode
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000

@@ -1,0 +1,121 @@
+{{- if .Values.disaggregation.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-prefill
+  labels:
+    app: vllm-prefill
+    llm-d.ai/role: prefill
+spec:
+  replicas: {{ .Values.vllmPrefill.replicas }}
+  selector:
+    matchLabels:
+      app: vllm-prefill
+      llm-d.ai/role: prefill
+  template:
+    metadata:
+      labels:
+        app: vllm-prefill
+        llm-d.ai/role: prefill
+    spec:
+      containers:
+      - name: simulator
+        image: {{ .Values.vllmPrefill.image }}
+        args:
+          - "--model"
+          - "{{ .Values.vllmPrefill.model }}"
+          - "--port"
+          - "{{ .Values.vllmPrefill.port }}"
+          - "--max-num-seqs"
+          - "{{ .Values.vllmPrefill.maxNumSeqs }}"
+          - "--max-waiting-queue-length"
+          - "{{ .Values.vllmPrefill.maxQueueLength }}"
+          - "--max-model-len"
+          - "{{ .Values.vllmPrefill.maxModelLen }}"
+          - "--prefill-overhead"
+          - "{{ .Values.vllmPrefill.prefillOverhead }}"
+          - "--prefill-time-per-token"
+          - "{{ .Values.vllmPrefill.prefillTimePerToken }}"
+          - "--prefill-time-std-dev"
+          - "{{ .Values.vllmPrefill.prefillTimePerTokenStdDev }}"
+          - "--time-factor-under-load"
+          - "{{ .Values.vllmPrefill.timeFactorUnderLoad }}"
+        ports:
+        - containerPort: {{ .Values.vllmPrefill.port }}
+          name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-prefill-headless
+spec:
+  clusterIP: None
+  selector:
+    app: vllm-prefill
+    llm-d.ai/role: prefill
+  ports:
+  - name: http
+    port: {{ .Values.vllmPrefill.port }}
+    targetPort: {{ .Values.vllmPrefill.port }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-decode
+  labels:
+    app: vllm-decode
+    llm-d.ai/role: decode
+spec:
+  replicas: {{ .Values.vllmDecode.replicas }}
+  selector:
+    matchLabels:
+      app: vllm-decode
+      llm-d.ai/role: decode
+  template:
+    metadata:
+      labels:
+        app: vllm-decode
+        llm-d.ai/role: decode
+    spec:
+      containers:
+      - name: simulator
+        image: {{ .Values.vllmDecode.image }}
+        args:
+          - "--model"
+          - "{{ .Values.vllmDecode.model }}"
+          - "--port"
+          - "{{ .Values.vllmDecode.port }}"
+          - "--max-num-seqs"
+          - "{{ .Values.vllmDecode.maxNumSeqs }}"
+          - "--max-waiting-queue-length"
+          - "{{ .Values.vllmDecode.maxQueueLength }}"
+          - "--max-model-len"
+          - "{{ .Values.vllmDecode.maxModelLen }}"
+          - "--inter-token-latency"
+          - "{{ .Values.vllmDecode.interTokenLatency }}"
+          - "--inter-token-latency-std-dev"
+          - "{{ .Values.vllmDecode.interTokenLatencyStdDev }}"
+          - "--kv-cache-transfer-time-per-token"
+          - "{{ .Values.vllmDecode.kvCacheTransferTimePerToken }}"
+          - "--kv-cache-transfer-time-std-dev"
+          - "{{ .Values.vllmDecode.kvCacheTransferTimeStdDev }}"
+          - "--time-factor-under-load"
+          - "{{ .Values.vllmDecode.timeFactorUnderLoad }}"
+        ports:
+        - containerPort: {{ .Values.vllmDecode.port }}
+          name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-decode-headless
+spec:
+  clusterIP: None
+  selector:
+    app: vllm-decode
+    llm-d.ai/role: decode
+  ports:
+  - name: http
+    port: {{ .Values.vllmDecode.port }}
+    targetPort: {{ .Values.vllmDecode.port }}
+{{- end }}

@@ -1,9 +1,11 @@
 package selector
 
 import (
-    "math"
-    "sync"
-    "router/discovery"
+	"math"
+	"sync"
+
+	"router/discovery"
+	"router/prepare"
 )
 
 type QueueAware struct {
@@ -21,7 +23,7 @@ func (q *QueueAware) Update(healths []discovery.ReplicaHealth) {
     q.mu.Unlock()
 }
 
-func (q *QueueAware) Pick() (string, float64) {
+func (q *QueueAware) Pick(_ *prepare.RequestContext) (string, float64) {
     q.mu.RLock()
     defer q.mu.RUnlock()
 
@@ -38,3 +40,6 @@ func (q *QueueAware) Pick() (string, float64) {
     }
     return best, bestScore
 }
+
+func (q *QueueAware) OnRequestStart(string, float64) {}
+func (q *QueueAware) OnRequestFinish(string, float64) {}

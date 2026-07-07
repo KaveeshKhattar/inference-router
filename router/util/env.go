@@ -12,6 +12,8 @@ const (
 	DefaultMetricsPort   = 8000
 	DefaultRouterPort    = 9000
 	DefaultDiscoveryHost = "vllm-headless.default.svc.cluster.local"
+	DefaultPrefillDiscoveryHost = "vllm-prefill-headless.default.svc.cluster.local"
+	DefaultDecodeDiscoveryHost  = "vllm-decode-headless.default.svc.cluster.local"
 	DefaultScrapeTimeout = 1500 * time.Millisecond
 	DefaultLoadRecalc    = 1 * time.Second
 )

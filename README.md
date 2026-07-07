@@ -248,4 +248,38 @@ This router is a from-scratch Go implementation of that same scoring idea — wi
 - [x] Layer 4 — Go metrics client
 - [x] Layer 5 — Router with scoring function
 - [x] Layer 6 — Helm chart + router metrics
-- [ ] Layer 7 — Controlled benchmark, p99 TTFT comparison
+- [x] Layer 7 — Controlled benchmark, p99 TTFT comparison
+- [x] Layer 8 — Prepare stage (tokenize + cumulative block hash)
+- [x] Layer 9 — Block index (sharded HostBitmap + prefix query)
+- [x] Layer 10 — Composable Filter → Score → Pick (cache + load)
+- [x] Layer 11 — PGKeeper-style admission control
+- [ ] Layer 12 — Multi-dimensional fair sharing _(stretch / future work)_
+- [x] Layer 13 — Disaggregated prefill/decode execution
+- [x] Layer 14 — Benchmark suite + talk artifacts (`load-testing/experiments.json`, `summarize_results.py`)
+
+### Layer 14 — Reproducible benchmarks
+
+```bash
+pip install -r load-testing/requirements.txt
+
+# Single experiment (prints router env, then runs load generator)
+python load-testing/run_experiment.py --id cache-aware
+
+# Full suite (interactive — reconfigure router between runs)
+./load-testing/run_suite.sh
+
+# Generate RESULTS.md from CSVs
+python load-testing/summarize_results.py --write load-testing/results/RESULTS.md
+
+# Compare two runs
+python load-testing/compare_results.py \
+  --baseline load-testing/results/exp-round-robin-rps15.csv \
+  --candidate load-testing/results/exp-cache-aware-rps15.csv \
+  --baseline-name round-robin --candidate-name cache-aware
+
+# TTFT bar chart for slides
+python load-testing/plot_comparison.py \
+  --ids round-robin queue-aware cache-aware --metric p95
+```
+
+Import Grafana dashboard: `observability/grafana-strategies.json`

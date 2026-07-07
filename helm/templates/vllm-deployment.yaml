@@ -1,3 +1,4 @@
+{{- if not .Values.disaggregation.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -70,3 +71,4 @@ spec:
         # with no GPU requirement. In a production manifest targeting
         # real vLLM, you would request nvidia.com/gpu: 1 here and set
         # memory limits reflecting VRAM budget.
+{{- end }}

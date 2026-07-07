@@ -40,16 +40,44 @@ type Updater interface {
 // StartBackgroundRefresh resolves replicas via DNS and scrapes their metrics
 // on every tick, calling u.Update with the results.
 func StartBackgroundRefresh(client *http.Client, u Updater, interval time.Duration) {
+	host := util.GetEnvString("VLLM_DISCOVERY_HOST", util.DefaultDiscoveryHost)
+	startPoolRefresh(client, host, u, interval)
+}
+
+// StartDualPoolRefresh scrapes separate prefill and decode pools (Layer 13).
+func StartDualPoolRefresh(client *http.Client, prefill, decode Updater, interval time.Duration) {
+	prefillHost := util.GetEnvString("VLLM_PREFILL_DISCOVERY_HOST", util.DefaultPrefillDiscoveryHost)
+	decodeHost := util.GetEnvString("VLLM_DECODE_DISCOVERY_HOST", util.DefaultDecodeDiscoveryHost)
+
 	go func() {
 		refresh := func() {
-			replicas := lookupReplicas()
+			if urls := lookupReplicasAt(prefillHost); len(urls) > 0 {
+				prefill.Update(scrapeAll(client, urls))
+			}
+			if urls := lookupReplicasAt(decodeHost); len(urls) > 0 {
+				decode.Update(scrapeAll(client, urls))
+			}
+		}
+		refresh()
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for range t.C {
+			refresh()
+		}
+	}()
+}
+
+func startPoolRefresh(client *http.Client, host string, u Updater, interval time.Duration) {
+	go func() {
+		refresh := func() {
+			replicas := lookupReplicasAt(host)
 			if len(replicas) == 0 {
 				return
 			}
 			u.Update(scrapeAll(client, replicas))
 		}
 
-		refresh() // immediate first scrape before first tick
+		refresh()
 
 		t := time.NewTicker(interval)
 		defer t.Stop()
@@ -59,9 +87,12 @@ func StartBackgroundRefresh(client *http.Client, u Updater, interval time.Durati
 	}()
 }
 
-// lookupReplicas resolves the headless service DNS name to pod IPs.
 func lookupReplicas() []string {
 	host := util.GetEnvString("VLLM_DISCOVERY_HOST", util.DefaultDiscoveryHost)
+	return lookupReplicasAt(host)
+}
+
+func lookupReplicasAt(host string) []string {
 	port := util.GetEnvInt("VLLM_METRICS_PORT", util.DefaultMetricsPort)
 
 	ips, err := net.LookupHost(host)

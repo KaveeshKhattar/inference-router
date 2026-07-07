@@ -27,15 +27,23 @@ VOCAB = [
     "attention",
 ]
 
+# ~256 tokens (1024 chars) shared system prefix for cache-affinity experiments.
+# Router tokenize uses chars/4; 1024 chars ≈ 16 blocks of 16 tokens each.
+SHARED_SYSTEM_PROMPT = (
+    "You are a helpful assistant for inference routing benchmarks. "
+    "Follow instructions precisely and keep answers concise. "
+    + ("x" * 900)
+)
 
-def sample_prompt_tokens() -> int:
+
+def sample_prompt_tokens(min_tokens: int = 8) -> int:
     # Mixture distribution: mostly short prompts, with medium/long tail.
     p = random.random()
     if p < 0.20:
-        return random.randint(8, 64)
+        return random.randint(min_tokens, 64)
     if 0.20 < p < 0.32:
-        return random.randint(65, 512)
-    return random.randint(513, 2048)
+        return random.randint(max(min_tokens, 65), 512)
+    return random.randint(max(min_tokens, 513), 2048)
 
 
 def sample_max_tokens() -> int:
@@ -53,11 +61,24 @@ def generate_prompt(token_count: int) -> str:
     return " ".join(words)
 
 
+def build_messages(prompt_tokens: int, shared_prefix: bool) -> list[dict[str, str]]:
+    if not shared_prefix:
+        return [{"role": "user", "content": generate_prompt(prompt_tokens)}]
+
+    # Fixed system prompt + variable user tail → real prefix sharing across requests.
+    tail_tokens = max(8, prompt_tokens)
+    return [
+        {"role": "system", "content": SHARED_SYSTEM_PROMPT},
+        {"role": "user", "content": generate_prompt(tail_tokens)},
+    ]
+
+
 @dataclass
 class RequestResult:
     req_id: int
     prompt_tokens: int
     max_tokens: int
+    priority: str
     status: int
     latency_s: float
     ttfb_s: float
@@ -107,6 +128,22 @@ class Recorder:
                 f"p99={self._quantile(ttfbs, 0.99):.3f} "
                 f"avg={statistics.mean(ttfbs):.3f}"
             )
+        self._print_priority_summary()
+
+    def _print_priority_summary(self) -> None:
+        for pri in ("high", "low"):
+            rows = [r for r in self.rows if r.ok and r.priority == pri]
+            if not rows:
+                continue
+            ttfbs = [r.ttfb_s for r in rows if r.ttfb_s >= 0]
+            if not ttfbs:
+                continue
+            print(
+                f"priority={pri} count={len(rows)} "
+                f"ttfb_p50={self._quantile(ttfbs, 0.50):.3f} "
+                f"ttfb_p95={self._quantile(ttfbs, 0.95):.3f} "
+                f"ttfb_p99={self._quantile(ttfbs, 0.99):.3f}"
+            )
 
     def write_csv(self, path: str) -> None:
         with open(path, "w", newline="", encoding="utf-8") as f:
@@ -116,6 +153,7 @@ class Recorder:
                     "req_id",
                     "prompt_tokens",
                     "max_tokens",
+                    "priority",
                     "status",
                     "latency_s",
                     "ttfb_s",
@@ -129,6 +167,7 @@ class Recorder:
                         r.req_id,
                         r.prompt_tokens,
                         r.max_tokens,
+                        r.priority,
                         r.status,
                         f"{r.latency_s:.6f}",
                         f"{r.ttfb_s:.6f}",
@@ -157,19 +196,24 @@ async def send_request(
     recorder: Recorder,
     stats: RuntimeStats,
     verbose: bool,
+    shared_prefix: bool,
+    priority_high_fraction: float,
+    min_prompt_tokens: int,
 ) -> None:
     stats.started += 1
+    priority = "high" if random.random() < priority_high_fraction else "low"
     payload = {
         "model": model,
-        "messages": [{"role": "user", "content": generate_prompt(prompt_tokens)}],
+        "messages": build_messages(prompt_tokens, shared_prefix),
         "max_tokens": max_tokens,
         "stream": True
     }
 
+    headers = {"X-Router-Priority": priority}
     started = time.perf_counter()
     try:
         timeout = aiohttp.ClientTimeout(total=timeout_s)
-        async with session.post(url, json=payload, timeout=timeout) as resp:
+        async with session.post(url, json=payload, timeout=timeout, headers=headers) as resp:
             first_byte_started = time.perf_counter()
             first_chunk = await resp.content.read(1)
             ttfb_s = time.perf_counter() - started
@@ -182,6 +226,7 @@ async def send_request(
                     req_id=req_id,
                     prompt_tokens=prompt_tokens,
                     max_tokens=max_tokens,
+                    priority=priority,
                     status=resp.status,
                     latency_s=ended - started,
                     ttfb_s=ttfb_s,
@@ -207,6 +252,7 @@ async def send_request(
                 req_id=req_id,
                 prompt_tokens=prompt_tokens,
                 max_tokens=max_tokens,
+                priority=priority,
                 status=0,
                 latency_s=ended - started,
                 ttfb_s=-1.0,
@@ -257,8 +303,15 @@ async def run_phase(
     recorder: Recorder,
     progress_interval_s: float,
     verbose: bool,
+    shared_prefix: bool,
+    priority_high_fraction: float,
+    min_prompt_tokens: int,
 ) -> None:
-    print(f"Starting phase={phase_name} rps={rps} duration_s={duration_s} poisson={poisson}")
+    print(
+        f"Starting phase={phase_name} rps={rps} duration_s={duration_s} poisson={poisson} "
+        f"shared_prefix={shared_prefix} priority_high_fraction={priority_high_fraction} "
+        f"min_prompt_tokens={min_prompt_tokens}"
+    )
     loop = asyncio.get_running_loop()
     phase_start = loop.time()
     next_dispatch = phase_start
@@ -280,7 +333,7 @@ async def run_phase(
 
     async def launch_one(local_req_id: int) -> None:
         async with semaphore:
-            prompt_tokens = sample_prompt_tokens()
+            prompt_tokens = sample_prompt_tokens(min_prompt_tokens)
             max_tokens = sample_max_tokens()
             await send_request(
                 session=session,
@@ -293,6 +346,9 @@ async def run_phase(
                 recorder=recorder,
                 stats=stats,
                 verbose=verbose,
+                shared_prefix=shared_prefix,
+                priority_high_fraction=priority_high_fraction,
+                min_prompt_tokens=min_prompt_tokens,
             )
 
     while loop.time() - phase_start < duration_s:
@@ -335,6 +391,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--csv-out", default="load-testing/results.csv", help="Output CSV path")
     parser.add_argument("--progress-interval", type=float, default=5.0, help="Progress print interval seconds")
     parser.add_argument("--verbose", action="store_true", help="Print one line per request")
+    parser.add_argument(
+        "--shared-prefix",
+        action="store_true",
+        help="Use a fixed system prompt with variable user tail (cache-affinity workload)",
+    )
+    parser.add_argument(
+        "--priority-high-fraction",
+        type=float,
+        default=0.0,
+        help="Fraction of requests tagged high priority (X-Router-Priority header)",
+    )
+    parser.add_argument(
+        "--min-prompt-tokens",
+        type=int,
+        default=8,
+        help="Minimum prompt tokens (use 512+ for long-context P/D TTFT experiments)",
+    )
     return parser.parse_args()
 
 
@@ -346,7 +419,9 @@ async def main() -> None:
         "Config "
         f"url={args.url} model={args.model} rps={args.rps} warmup_s={args.warmup_seconds} "
         f"duration_s={args.duration_seconds} max_in_flight={args.max_in_flight} "
-        f"poisson={not args.deterministic} progress_interval={args.progress_interval} verbose={args.verbose}"
+        f"poisson={not args.deterministic} shared_prefix={args.shared_prefix} "
+        f"priority_high_fraction={args.priority_high_fraction} min_prompt_tokens={args.min_prompt_tokens} "
+        f"progress_interval={args.progress_interval} verbose={args.verbose}"
     )
 
     warmup_recorder = Recorder()
@@ -367,6 +442,9 @@ async def main() -> None:
                 recorder=warmup_recorder,
                 progress_interval_s=args.progress_interval,
                 verbose=args.verbose,
+                shared_prefix=args.shared_prefix,
+                priority_high_fraction=args.priority_high_fraction,
+                min_prompt_tokens=args.min_prompt_tokens,
             )
 
         await run_phase(
@@ -382,6 +460,9 @@ async def main() -> None:
             recorder=measure_recorder,
             progress_interval_s=args.progress_interval,
             verbose=args.verbose,
+            shared_prefix=args.shared_prefix,
+            priority_high_fraction=args.priority_high_fraction,
+            min_prompt_tokens=args.min_prompt_tokens,
         )
 
     print("\nWarmup summary:")

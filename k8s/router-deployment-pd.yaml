@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: inference-router
 spec:
-  replicas: {{ .Values.router.replicas }}
+  replicas: 1
   selector:
     matchLabels:
       app: inference-router
@@ -14,19 +14,16 @@ spec:
     spec:
       containers:
       - name: router
-        image: {{ .Values.router.image }}
+        image: llm-router:local
         imagePullPolicy: Never
         ports:
         - containerPort: 9000
         env:
-        {{- if .Values.disaggregation.enabled }}
         - name: ROUTER_PD_ENABLED
           value: "1"
+        - name: ROUTER_STRATEGY
+          value: cache-aware
         - name: VLLM_PREFILL_DISCOVERY_HOST
-          value: {{ .Values.router.prefillDiscoveryHost }}
+          value: vllm-prefill-headless.default.svc.cluster.local
         - name: VLLM_DECODE_DISCOVERY_HOST
-          value: {{ .Values.router.decodeDiscoveryHost }}
-        {{- else }}
-        - name: VLLM_DISCOVERY_HOST
-          value: {{ .Values.router.discoveryHost }}
-        {{- end }}
+          value: vllm-decode-headless.default.svc.cluster.local
